@@ -2,7 +2,7 @@
 """
 Streamlit Admission Predictor app (no TensorFlow).
 - Upload CSV OR the app will try to read 'Admission_Predict.csv' from the repo root.
-- Trains Linear Regression, Decision Tree, Random Forest (sklearn).
+- Trains Linear Regression, Decision Tree, and Random Forest (sklearn).
 - Shows metrics, prediction UI, and allows downloading saved model zip.
 """
 
@@ -44,6 +44,10 @@ def load_csv(uploaded_file):
         return None
 
 def preprocess(df):
+    # ensure required columns exist
+    missing = [c for c in FEATURES + [TARGET] if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in CSV: {missing}")
     # drop rows missing required features or target
     df = df.dropna(subset=FEATURES + [TARGET])
     X = df[FEATURES].astype(float)
@@ -114,7 +118,12 @@ if train_clicked:
     df = load_csv(uploaded_file)
     if df is None:
         st.stop()
-    X, y = preprocess(df)
+    try:
+        X, y = preprocess(df)
+    except Exception as e:
+        st.error(f"Preprocessing error: {e}")
+        st.stop()
+
     st.write(f"Dataset rows after cleaning: {len(X)}")
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     min_vals = X_train.min()
@@ -130,9 +139,10 @@ if train_clicked:
     y_pred_lr = np.clip(y_pred_lr, 0.0, 1.0)
     y_pred_dt = np.clip(y_pred_dt, 0.0, 1.0)
     y_pred_rf = np.clip(y_pred_rf, 0.0, 1.0)
-    # metrics
+    # metrics (RMSE computed by sqrt of MSE for compatibility)
     def metrics(y_true, y_pred):
-        return {"R2": r2_score(y_true, y_pred), "RMSE": mean_squared_error(y_true, y_pred, squared=False)}
+        mse = mean_squared_error(y_true, y_pred)
+        return {"R2": float(r2_score(y_true, y_pred)), "RMSE": float(np.sqrt(mse))}
     m_lr = metrics(y_test, y_pred_lr)
     m_dt = metrics(y_test, y_pred_dt)
     m_rf = metrics(y_test, y_pred_rf)
@@ -189,11 +199,8 @@ if submit:
         pred_lr = float(lr.predict(X_in)[0])
         pred_dt = float(dt.predict(X_in)[0])
         pred_rf = float(rf.predict(X_in)[0])
-        # normalize if scaler present for ensemble (ANN omitted)
-        if scaler is not None:
-            ensemble = (pred_lr + pred_dt + pred_rf) / 3.0
-        else:
-            ensemble = (pred_lr + pred_dt + pred_rf) / 3.0
+        # ensemble average (no ANN here)
+        ensemble = (pred_lr + pred_dt + pred_rf) / 3.0
         def fmt(x): return f"{max(0.0, min(1.0, x))*100:.2f}%"
         st.write("### Predictions")
         st.write("Linear Regression:", fmt(pred_lr))
@@ -203,3 +210,4 @@ if submit:
 
 st.write("---")
 st.markdown("**Notes:** This app trains models on the uploaded CSV (or `Admission_Predict.csv` in repo root). It does not require TensorFlow.")
+
