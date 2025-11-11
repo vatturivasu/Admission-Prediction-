@@ -1,10 +1,11 @@
-# train_and_export_no_tf.py
+# train_and_export_no_tf.py (fixed)
 """
 Train models locally outside Streamlit (no TensorFlow).
 Run: python train_and_export_no_tf.py
 """
 import pandas as pd
 import joblib
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeRegressor
@@ -16,6 +17,11 @@ FEATURES = ['GRE Score', 'TOEFL Score', 'University Rating', 'SOP', 'LOR ', 'CGP
 TARGET = 'Chance of Admit '
 
 df = pd.read_csv(DATA_PATH)
+# ensure required columns exist
+missing = [c for c in FEATURES + [TARGET] if c not in df.columns]
+if missing:
+    raise ValueError(f"Missing columns in CSV: {missing}")
+
 df = df.dropna(subset=FEATURES + [TARGET])
 X = df[FEATURES].astype(float)
 y = df[TARGET].astype(float)
@@ -37,9 +43,12 @@ joblib.dump(dt, "model_decision_tree.pkl")
 joblib.dump(rf, "model_random_forest.pkl")
 joblib.dump({'features': FEATURES, 'target': TARGET}, "model_meta.pkl")
 
-# print metrics
+# print metrics (compute RMSE by sqrt of MSE for compatibility)
 for name, model in [("Linear Regression", lr), ("Decision Tree", dt), ("Random Forest", rf)]:
     y_pred = model.predict(X_test)
-    print(name, "R2:", r2_score(y_test, y_pred), "RMSE:", mean_squared_error(y_test, y_pred, squared=False))
+    mse = mean_squared_error(y_test, y_pred)
+    rmse = np.sqrt(mse)
+    print(f"{name} R2: {r2_score(y_test, y_pred):.4f} RMSE: {rmse:.4f}")
 
 print("Saved models to current directory.")
+
